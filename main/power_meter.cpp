@@ -284,7 +284,7 @@ esp_err_t power_meter_add_to_endpoint(esp_matter::endpoint_t *endpoint)
     if (!epm) {
         return ESP_FAIL;
     }
-    esp_matter::nullable<int64_t> null_value;
+    nullable<int64_t> null_value;
     cluster::electrical_power_measurement::attribute::create_voltage(epm, null_value);
     cluster::electrical_power_measurement::attribute::create_active_current(epm, null_value);
     return ESP_OK;
