@@ -1,0 +1,18 @@
+menu "Relay Configuration"
+
+    config RELAY_GPIO
+        int "Relay GPIO number"
+        range 0 21
+        default 5
+        help
+            GPIO that drives the relay module.
+
+    config RELAY_ACTIVE_LEVEL
+        int "Relay active level (1 = active-high, 0 = active-low)"
+        range 0 1
+        default 1
+        help
+            Level written to the relay GPIO to turn the relay ON.
+            Many cheap optocoupled relay boards are active-low: set 0 for those.
+
+endmenu
