@@ -16,3 +16,76 @@ menu "Relay Configuration"
             Many cheap optocoupled relay boards are active-low: set 0 for those.
 
 endmenu
+
+menu "BL0937 Power Meter"
+
+    config BL0937_ENABLE
+        bool "Enable BL0937 power metering"
+        default y
+        help
+            Read active power / voltage / current / energy from a BL0937 and
+            expose them over Matter (Electrical Power + Energy Measurement).
+
+    config BL0937_CF_GPIO
+        int "CF pin (active power pulses)"
+        depends on BL0937_ENABLE
+        range 0 21
+        default 6
+
+    config BL0937_CF1_GPIO
+        int "CF1 pin (current / voltage pulses)"
+        depends on BL0937_ENABLE
+        range 0 21
+        default 7
+
+    config BL0937_SEL_GPIO
+        int "SEL pin (selects current or voltage on CF1)"
+        depends on BL0937_ENABLE
+        range 0 21
+        default 10
+
+    config BL0937_SEL_CURRENT_LEVEL
+        int "SEL level that puts CF1 in current mode"
+        depends on BL0937_ENABLE
+        range 0 1
+        default 0
+        help
+            BL0937: SEL=0 -> CF1 outputs current, SEL=1 -> voltage.
+            (HLW8012 is the opposite.) Flip this if voltage and current look swapped.
+
+    config BL0937_SHUNT_MICROOHM
+        int "Current shunt resistor (micro-ohm)"
+        depends on BL0937_ENABLE
+        default 1000
+        help
+            1000 = 1 mOhm, the usual value on smart plugs.
+
+    config BL0937_VOLTAGE_DIVIDER
+        int "Voltage divider ratio (R_upper + R_lower) / R_lower"
+        depends on BL0937_ENABLE
+        default 2351
+        help
+            e.g. 5 x 470k + 1k -> 2351.
+
+    config BL0937_POWER_CAL_PERMILLE
+        int "Power calibration factor (per mille, 1000 = x1.000)"
+        depends on BL0937_ENABLE
+        default 1000
+
+    config BL0937_VOLTAGE_CAL_PERMILLE
+        int "Voltage calibration factor (per mille)"
+        depends on BL0937_ENABLE
+        default 1000
+
+    config BL0937_CURRENT_CAL_PERMILLE
+        int "Current calibration factor (per mille)"
+        depends on BL0937_ENABLE
+        default 1000
+
+    config BL0937_UPDATE_INTERVAL_MS
+        int "Measurement window per CF1 mode (ms)"
+        depends on BL0937_ENABLE
+        range 500 10000
+        default 2000
+
+endmenu

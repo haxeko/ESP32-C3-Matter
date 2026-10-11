@@ -10,6 +10,9 @@
 
 #include <app_priv.h>
 #include <app_reset.h>
+#if CONFIG_BL0937_ENABLE
+#include <power_meter.h>
+#endif
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
@@ -117,11 +120,24 @@ extern "C" void app_main()
     relay_endpoint_id = endpoint::get_id(endpoint);
     ESP_LOGI(TAG, "Relay plug-in unit created with endpoint_id %d", relay_endpoint_id);
 
+#if CONFIG_BL0937_ENABLE
+    /* Same endpoint also becomes an Electrical Sensor: power / voltage / current / energy */
+    err = power_meter_add_to_endpoint(endpoint);
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to add electrical sensor, err:%d", err));
+#endif
+
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
 
     /* Restore the last relay state persisted in NVS */
     app_driver_relay_set_defaults(relay_endpoint_id);
+
+#if CONFIG_BL0937_ENABLE
+    err = power_meter_start(relay_endpoint_id);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Power meter not started, err:%d", err);
+    }
+#endif
 
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();

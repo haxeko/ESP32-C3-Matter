@@ -1,4 +1,4 @@
-# ESP32-C3 Matter over Wi-Fi – Relay GPIO5
+# ESP32-C3 Matter over Wi-Fi – Relay GPIO5 + đo công suất BL0937
 
 Firmware ESP-IDF + [esp-matter](https://github.com/espressif/esp-matter) cho ESP32-C3, tạo thiết bị Matter
 **On/Off Plug-in Unit** (ổ cắm/công tắc) điều khiển **relay ở GPIO5**, kết nối qua **Wi-Fi**,
@@ -9,8 +9,55 @@ commissioning qua **BLE**.
 | Relay (active-high mặc định) | GPIO5 |
 | Nút BOOT – nhấn ngắn: bật/tắt relay | GPIO9 |
 | Nút BOOT – giữ 5 s rồi thả: factory reset | GPIO9 |
+| BL0937 CF (xung công suất) | GPIO6 |
+| BL0937 CF1 (xung dòng / áp) | GPIO7 |
+| BL0937 SEL (chọn dòng / áp cho CF1) | GPIO10 |
 
 Trạng thái relay được lưu NVS và khôi phục sau khi mất điện.
+
+## Đo công suất (BL0937)
+
+Cùng endpoint với relay được thêm device type **Electrical Sensor** của Matter:
+
+| Cluster | Thuộc tính | Đơn vị |
+|---|---|---|
+| Electrical Power Measurement | ActivePower | mW |
+| | Voltage | mV |
+| | ActiveCurrent | mA |
+| Electrical Energy Measurement | CumulativeEnergyImported | mWh (lưu NVS mỗi 10 phút) |
+
+- Cập nhật mỗi 2 s (`BL0937_UPDATE_INTERVAL_MS`); CF1 luân phiên đo áp / dòng giữa các cửa sổ.
+- ESP32-C3 không có bộ đếm xung PCNT nên xung được đếm bằng ngắt GPIO và đo chu kỳ, vẫn chính xác ở tải nhỏ.
+- Tải quá nhỏ để đo dòng trên CF1 → dòng được tính bằng P/U.
+
+**Hiển thị trên app:** dữ liệu theo chuẩn Matter 1.3+ nên Home Assistant, SmartThings, Google Home đọc được.
+Apple Home có hiển thị công suất hay không tuỳ phiên bản iOS – nếu không thấy trong Apple Home, dữ liệu vẫn có
+trên Matter và đọc được qua Home Assistant hoặc chip-tool:
+
+```bash
+chip-tool electricalpowermeasurement read active-power 0x7283 1
+chip-tool electricalenergymeasurement read cumulative-energy-imported 0x7283 1
+```
+
+### Hiệu chuẩn
+
+`idf.py menuconfig` → **BL0937 Power Meter**:
+
+| Tuỳ chọn | Mặc định | Ý nghĩa |
+|---|---|---|
+| `BL0937_SHUNT_MICROOHM` | 1000 | điện trở shunt 1 mΩ |
+| `BL0937_VOLTAGE_DIVIDER` | 2351 | phân áp (5 × 470 kΩ + 1 kΩ) / 1 kΩ |
+| `BL0937_SEL_CURRENT_LEVEL` | 0 | mức SEL để CF1 ra dòng (đổi nếu áp và dòng bị tráo) |
+| `BL0937_*_CAL_PERMILLE` | 1000 | hệ số hiệu chỉnh ‰ cho công suất / áp / dòng |
+
+Cách hiệu chỉnh: cắm tải thuần trở đã biết (bóng sợi đốt / ấm đun 1000 W), so với đồng hồ chuẩn,
+rồi đặt `CAL = 1000 × giá_trị_chuẩn / giá_trị_đọc`. Ví dụ đọc 1050 W, thực tế 1000 W → `POWER_CAL_PERMILLE=952`.
+
+### Lưu ý phần cứng
+
+- BL0937 thường nối GND về dây pha/trung tính của lưới điện → **mạch không cách ly**. Không cắm USB vào máy tính
+  khi mạch đang cấp 220 V.
+- Nếu BL0937 cấp 5 V, chân CF/CF1 ra mức 5 V: cần phân áp hoặc dịch mức về 3.3 V trước khi vào ESP32-C3.
 
 ## Cấu hình
 
@@ -71,6 +118,8 @@ sdkconfig.defaults.esp32c3 chân nút, relay
 partitions.csv            4 MB, 2 phân vùng OTA
 main/app_main.cpp         tạo node + endpoint On/Off Plug-in Unit
 main/app_driver.cpp       điều khiển GPIO relay + nút
+main/bl0937.cpp           driver BL0937 (đếm xung CF / CF1 bằng ngắt GPIO)
+main/power_meter.cpp      Electrical Sensor: đưa công suất / áp / dòng / điện năng lên Matter
 main/Kconfig.projbuild    tuỳ chọn RELAY_GPIO / RELAY_ACTIVE_LEVEL
 ```
 
