@@ -174,8 +174,13 @@ void sync_matter()
         ESP_LOGI(TAG, "Reporting %s", report_on ? "ON" : "OFF");
         fan->SetFanMode(report_on ? FanControl::FanModeEnum::kHigh : FanControl::FanModeEnum::kOff);
     }
-    /* PercentCurrent is the actual fan output: always the measured state */
+    /* On/off only: a speed picked on a slider is snapped back to full */
+    if (report_on && fan->GetPercentSetting() != chip::app::DataModel::MakeNullable<chip::Percent>(100)) {
+        fan->SetPercentSetting(chip::app::DataModel::MakeNullable<chip::Percent>(100));
+    }
+    /* PercentCurrent / SpeedCurrent are the actual fan output: always the measured state */
     fan->SetPercentCurrent(s_measured_on ? 100 : 0);
+    fan->SetSpeedCurrent(s_measured_on ? 1 : 0);
     s_syncing = false;
 }
 

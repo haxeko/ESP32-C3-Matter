@@ -108,12 +108,18 @@ extern "C" void app_main()
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
-    /* Air Purifier device type, on/off only: FanModeSequence Off/High */
+    /* Air Purifier device type, on/off only: FanModeSequence Off/High, one speed */
     air_purifier::config_t purifier_config;
     purifier_config.fan_control.fan_mode = chip::to_underlying(FanControl::FanModeEnum::kOff);
     purifier_config.fan_control.fan_mode_sequence = chip::to_underlying(FanControl::FanModeSequenceEnum::kOffHigh);
     endpoint_t *endpoint = air_purifier::create(node, &purifier_config, ENDPOINT_FLAG_NONE, NULL);
     ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create air purifier endpoint"));
+
+    /* A single speed: controllers that show a speed slider (Apple Home) can only snap it to off / full */
+    cluster::fan_control::feature::multi_speed::config_t one_speed;
+    one_speed.speed_max = 1;
+    err = cluster::fan_control::feature::multi_speed::add(cluster::get(endpoint, FanControl::Id), &one_speed);
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to add fan speed feature, err:%d", err));
 
     purifier_endpoint_id = endpoint::get_id(endpoint);
     ESP_LOGI(TAG, "Air purifier created with endpoint_id %d", purifier_endpoint_id);

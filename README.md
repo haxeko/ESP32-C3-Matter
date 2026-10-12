@@ -8,7 +8,10 @@ commissioning qua **BLE**.
   relay đóng **0,3 s** rồi nhả, giống như bấm nút nguồn.
 - Trạng thái máy **không đoán theo lệnh** mà lấy từ công suất đo được bằng BL0937:
   **P > 3 W → ON**, ngược lại **OFF**. Bật/tắt bằng nút trên máy hay remote cũng được cập nhật lên HomeKit.
-- Chỉ có bật / tắt: Fan Control dùng `FanModeSequence = Off/High`.
+- Chỉ có bật / tắt như công tắc, vẫn hiển thị là **máy lọc không khí**: Fan Control dùng
+  `FanModeSequence = Off/High` và chỉ **1 cấp tốc độ** (`SpeedMax = 1`). Chuẩn Matter bắt buộc có thuộc tính
+  phần trăm tốc độ nên Apple Home có thể vẫn vẽ thanh trượt trong màn hình chi tiết, nhưng nó chỉ có 2 vị trí
+  tắt / bật; kéo tới bất kỳ mức nào khác 0 cũng chỉ là "bật" và firmware kéo thanh về 100 %.
 
 | Chức năng | Chân |
 |---|---|
