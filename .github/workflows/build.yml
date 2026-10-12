@@ -19,14 +19,14 @@ jobs:
           pushd $ESP_MATTER_PATH && . ./export.sh && popd
           idf.py set-target esp32c3
           idf.py build
-          idf.py merge-bin -o matter_relay_merged.bin
+          idf.py merge-bin -o matter_air_purifier_merged.bin
       - uses: actions/upload-artifact@v4
         with:
-          name: matter_relay-esp32c3
+          name: matter_air_purifier-esp32c3
           path: |
-            build/matter_relay.bin
+            build/matter_air_purifier.bin
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
             build/ota_data_initial.bin
             build/flash_args
-            build/matter_relay_merged.bin
+            build/matter_air_purifier_merged.bin

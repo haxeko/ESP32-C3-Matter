@@ -1,7 +1,7 @@
 CONFIG_IDF_TARGET="esp32c3"
 
 # ESP32-C3 board settings
-# BOOT button (GPIO9): short press toggles relay, long press (5 s) = factory reset
+# BOOT button (GPIO9): short press switches the purifier, long press (5 s) = factory reset
 CONFIG_BSP_BUTTONS_NUM=1
 CONFIG_BSP_BUTTON_1_TYPE_GPIO=y
 CONFIG_BSP_BUTTON_1_GPIO=9
@@ -12,12 +12,13 @@ CONFIG_BSP_LED_TYPE_RGB=y
 CONFIG_BSP_LED_RGB_GPIO=8
 CONFIG_BSP_LED_RGB_BACKEND_RMT=y
 
-# Relay on GPIO5, active-high
+# Relay on GPIO5, active-high, contacts in parallel with the purifier power button
 CONFIG_RELAY_GPIO=5
 CONFIG_RELAY_ACTIVE_LEVEL=1
+CONFIG_PURIFIER_PULSE_MS=300
+CONFIG_PURIFIER_ON_THRESHOLD_MW=3000
 
 # BL0937 power meter (CF, CF1, SEL)
-CONFIG_BL0937_ENABLE=y
 CONFIG_BL0937_CF_GPIO=6
 CONFIG_BL0937_CF1_GPIO=7
 CONFIG_BL0937_SEL_GPIO=10

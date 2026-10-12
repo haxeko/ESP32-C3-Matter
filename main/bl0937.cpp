@@ -16,7 +16,6 @@
  * with V(I) = I * R_shunt and V(V) = U / divider.
  */
 #include <sdkconfig.h>
-#if CONFIG_BL0937_ENABLE
 
 #include "bl0937.h"
 
@@ -151,7 +150,11 @@ void bl0937_update(bl0937_reading_t *out)
 
     /* --- Active power from CF: pulses / time since the previous pulse --- */
     if (cf.count > 0) {
-        if (s_cf_prev_last_us > 0 && cf.last_us > s_cf_prev_last_us) {
+        /* Gap before this window far longer than the pulse spacing inside it: the load just went up
+           (e.g. appliance switched on), the old pulse would drag the first estimate down */
+        bool load_stepped_up = cf.count >= 3 && s_cf_prev_last_us > 0 &&
+                               (cf.first_us - s_cf_prev_last_us) * (int64_t)(cf.count - 1) > 2 * (cf.last_us - cf.first_us);
+        if (s_cf_prev_last_us > 0 && cf.last_us > s_cf_prev_last_us && !load_stepped_up) {
             s_cf_freq = cf.count * 1e6 / (double)(cf.last_us - s_cf_prev_last_us);
         } else if (cf.count >= 2) {
             s_cf_freq = (cf.count - 1) * 1e6 / (double)(cf.last_us - cf.first_us);
@@ -197,5 +200,3 @@ void bl0937_update(bl0937_reading_t *out)
 
     *out = s_reading;
 }
-
-#endif // CONFIG_BL0937_ENABLE

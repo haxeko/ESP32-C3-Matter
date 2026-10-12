@@ -1,10 +1,10 @@
 /*
- * Publishes BL0937 readings over Matter:
+ * Reads the BL0937 every CONFIG_BL0937_UPDATE_INTERVAL_MS, hands the active power to the
+ * application callback and, with CONFIG_POWER_METER_MATTER, publishes the readings over Matter:
  *   - Electrical Power Measurement: ActivePower (mW), Voltage (mV), ActiveCurrent (mA)
  *   - Electrical Energy Measurement: CumulativeEnergyImported (mWh), persisted in NVS
  */
 #include <sdkconfig.h>
-#if CONFIG_BL0937_ENABLE
 
 #include "power_meter.h"
 #include "bl0937.h"
@@ -26,6 +26,10 @@ using namespace chip::app;
 using namespace chip::app::Clusters;
 
 static const char *TAG = "power_meter";
+
+static power_meter_cb_t s_power_cb;
+
+#if CONFIG_POWER_METER_MATTER
 
 static constexpr const char *k_nvs_namespace = "power_meter";
 static constexpr const char *k_nvs_energy_key = "energy_mwh";
@@ -208,51 +212,42 @@ bool set_energy_accuracy()
     return err == CHIP_NO_ERROR;
 }
 
-void meter_task(void *arg)
+void publish(const bl0937_reading_t &r)
 {
-    uint64_t saved_energy = load_energy();
-    uint64_t reported_energy = UINT64_MAX;
-    int64_t last_energy_report = 0;
-    int64_t last_energy_save = esp_timer_get_time();
-    bool accuracy_set = false;
+    static uint64_t saved_energy = load_energy();
+    static uint64_t reported_energy = UINT64_MAX;
+    static int64_t last_energy_report = 0;
+    static int64_t last_energy_save = esp_timer_get_time();
+    static bool accuracy_set = false;
 
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_BL0937_UPDATE_INTERVAL_MS));
+    int64_t now = esp_timer_get_time();
 
-        bl0937_reading_t r;
-        bl0937_update(&r);
-        int64_t now = esp_timer_get_time();
+    /* Round to 0.1 W / 0.1 V / 1 mA so jitter does not flood subscribers */
+    int64_t power_mw = llround(r.power_w * 10.0f) * 100;
+    int64_t voltage_mv = llround(r.voltage_v * 10.0f) * 100;
+    int64_t current_ma = llround(r.current_a * 1000.0f);
 
-        /* Round to 0.1 W / 0.1 V / 1 mA so jitter does not flood subscribers */
-        int64_t power_mw = llround(r.power_w * 10.0f) * 100;
-        int64_t voltage_mv = llround(r.voltage_v * 10.0f) * 100;
-        int64_t current_ma = llround(r.current_a * 1000.0f);
-
-        ESP_LOGD(TAG, "P=%.1f W U=%.1f V I=%.3f A E=%llu mWh", r.power_w, r.voltage_v, r.current_a,
-                 (unsigned long long)r.energy_mwh);
-
-        {
-            esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-            if (!accuracy_set) {
-                accuracy_set = set_energy_accuracy();
-            }
-            s_power_delegate.SetActivePower(DataModel::MakeNullable(power_mw));
-            s_power_delegate.SetActiveCurrent(DataModel::MakeNullable(current_ma));
-            if (r.voltage_valid) {
-                s_power_delegate.SetVoltage(DataModel::MakeNullable(voltage_mv));
-            }
-            if (r.energy_mwh != reported_energy && now - last_energy_report >= k_energy_report_interval_us &&
-                report_energy(r.energy_mwh)) {
-                reported_energy = r.energy_mwh;
-                last_energy_report = now;
-            }
+    {
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        if (!accuracy_set) {
+            accuracy_set = set_energy_accuracy();
         }
-
-        if (r.energy_mwh != saved_energy && now - last_energy_save >= k_energy_save_interval_us) {
-            save_energy(r.energy_mwh);
-            saved_energy = r.energy_mwh;
-            last_energy_save = now;
+        s_power_delegate.SetActivePower(DataModel::MakeNullable(power_mw));
+        s_power_delegate.SetActiveCurrent(DataModel::MakeNullable(current_ma));
+        if (r.voltage_valid) {
+            s_power_delegate.SetVoltage(DataModel::MakeNullable(voltage_mv));
         }
+        if (r.energy_mwh != reported_energy && now - last_energy_report >= k_energy_report_interval_us &&
+            report_energy(r.energy_mwh)) {
+            reported_energy = r.energy_mwh;
+            last_energy_report = now;
+        }
+    }
+
+    if (r.energy_mwh != saved_energy && now - last_energy_save >= k_energy_save_interval_us) {
+        save_energy(r.energy_mwh);
+        saved_energy = r.energy_mwh;
+        last_energy_save = now;
     }
 }
 
@@ -290,12 +285,38 @@ esp_err_t power_meter_add_to_endpoint(esp_matter::endpoint_t *endpoint)
     return ESP_OK;
 }
 
-esp_err_t power_meter_start(uint16_t endpoint_id)
-{
-    s_endpoint_id = endpoint_id;
+#endif // CONFIG_POWER_METER_MATTER
 
-    uint64_t energy = load_energy();
+static void meter_task(void *arg)
+{
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_BL0937_UPDATE_INTERVAL_MS));
+
+        bl0937_reading_t r;
+        bl0937_update(&r);
+
+        ESP_LOGD(TAG, "P=%.1f W U=%.1f V I=%.3f A E=%llu mWh", r.power_w, r.voltage_v, r.current_a,
+                 (unsigned long long)r.energy_mwh);
+
+        if (s_power_cb) {
+            s_power_cb(r.power_w);
+        }
+#if CONFIG_POWER_METER_MATTER
+        publish(r);
+#endif
+    }
+}
+
+esp_err_t power_meter_start(uint16_t endpoint_id, power_meter_cb_t power_cb)
+{
+    s_power_cb = power_cb;
+
+    uint64_t energy = 0;
+#if CONFIG_POWER_METER_MATTER
+    s_endpoint_id = endpoint_id;
+    energy = load_energy();
     ESP_LOGI(TAG, "Restored energy: %llu mWh", (unsigned long long)energy);
+#endif
 
     esp_err_t err = bl0937_init(energy);
     if (err != ESP_OK) {
@@ -308,5 +329,3 @@ esp_err_t power_meter_start(uint16_t endpoint_id)
     }
     return ESP_OK;
 }
-
-#endif // CONFIG_BL0937_ENABLE

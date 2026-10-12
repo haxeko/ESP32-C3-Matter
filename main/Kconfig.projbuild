@@ -1,52 +1,86 @@
-menu "Relay Configuration"
+menu "Air Purifier"
 
     config RELAY_GPIO
         int "Relay GPIO number"
         range 0 21
         default 5
         help
-            GPIO that drives the relay module.
+            GPIO that drives the relay. The relay contacts are wired in parallel
+            with the purifier's power button.
 
     config RELAY_ACTIVE_LEVEL
         int "Relay active level (1 = active-high, 0 = active-low)"
         range 0 1
         default 1
         help
-            Level written to the relay GPIO to turn the relay ON.
+            Level written to the relay GPIO to close the relay (press the button).
             Many cheap optocoupled relay boards are active-low: set 0 for those.
+
+    config PURIFIER_PULSE_MS
+        int "Button press length (ms)"
+        range 50 3000
+        default 300
+        help
+            How long the relay stays closed to switch the purifier on or off.
+
+    config PURIFIER_PULSE_GAP_MS
+        int "Minimum time between two presses (ms)"
+        range 0 5000
+        default 700
+
+    config PURIFIER_ON_THRESHOLD_MW
+        int "Power above which the purifier is ON (mW)"
+        range 100 100000
+        default 3000
+        help
+            Measured power > this value: purifier reported ON, otherwise OFF.
+
+    config PURIFIER_DEBOUNCE_SAMPLES
+        int "Measurements in a row needed to change the state"
+        range 1 10
+        default 2
+        help
+            Number of consecutive BL0937 windows (CONFIG_BL0937_UPDATE_INTERVAL_MS each)
+            on the other side of the threshold before the state changes.
+
+    config PURIFIER_CONFIRM_TIMEOUT_MS
+        int "Time the purifier has to react to a press (ms)"
+        range 1000 60000
+        default 8000
+        help
+            After a press, the requested state is shown in the app while waiting for
+            the power draw to confirm it. If it is not confirmed in time, the measured
+            state is reported again.
 
 endmenu
 
 menu "BL0937 Power Meter"
 
-    config BL0937_ENABLE
-        bool "Enable BL0937 power metering"
+    config POWER_METER_MATTER
+        bool "Expose power / energy over Matter (Electrical Sensor)"
         default y
         help
-            Read active power / voltage / current / energy from a BL0937 and
-            expose them over Matter (Electrical Power + Energy Measurement).
+            Also publish active power / voltage / current / energy on the purifier
+            endpoint (Electrical Power + Energy Measurement). The BL0937 is always
+            used to detect whether the purifier is on.
 
     config BL0937_CF_GPIO
         int "CF pin (active power pulses)"
-        depends on BL0937_ENABLE
         range 0 21
         default 6
 
     config BL0937_CF1_GPIO
         int "CF1 pin (current / voltage pulses)"
-        depends on BL0937_ENABLE
         range 0 21
         default 7
 
     config BL0937_SEL_GPIO
         int "SEL pin (selects current or voltage on CF1)"
-        depends on BL0937_ENABLE
         range 0 21
         default 10
 
     config BL0937_SEL_CURRENT_LEVEL
         int "SEL level that puts CF1 in current mode"
-        depends on BL0937_ENABLE
         range 0 1
         default 0
         help
@@ -55,37 +89,31 @@ menu "BL0937 Power Meter"
 
     config BL0937_SHUNT_MICROOHM
         int "Current shunt resistor (micro-ohm)"
-        depends on BL0937_ENABLE
         default 1000
         help
             1000 = 1 mOhm, the usual value on smart plugs.
 
     config BL0937_VOLTAGE_DIVIDER
         int "Voltage divider ratio (R_upper + R_lower) / R_lower"
-        depends on BL0937_ENABLE
         default 2351
         help
             e.g. 5 x 470k + 1k -> 2351.
 
     config BL0937_POWER_CAL_PERMILLE
         int "Power calibration factor (per mille, 1000 = x1.000)"
-        depends on BL0937_ENABLE
         default 1000
 
     config BL0937_VOLTAGE_CAL_PERMILLE
         int "Voltage calibration factor (per mille)"
-        depends on BL0937_ENABLE
         default 1000
 
     config BL0937_CURRENT_CAL_PERMILLE
         int "Current calibration factor (per mille)"
-        depends on BL0937_ENABLE
         default 1000
 
     config BL0937_UPDATE_INTERVAL_MS
         int "Measurement window per CF1 mode (ms)"
-        depends on BL0937_ENABLE
         range 500 10000
-        default 2000
+        default 1000
 
 endmenu

@@ -1,4 +1,4 @@
-# ESP32-C3 Matter over Wi-Fi relay (On/Off Plug-in Unit) on GPIO5
+# ESP32-C3 Matter over Wi-Fi air purifier (power button relay on GPIO5 + BL0937 state sensing)
 cmake_minimum_required(VERSION 3.5)
 
 if(NOT DEFINED ENV{ESP_MATTER_PATH})
@@ -30,7 +30,7 @@ set(EXTRA_COMPONENT_DIRS
     "${ESP_MATTER_PATH}/device_hal/device"
     ${extra_components_dirs_append})
 
-project(matter_relay)
+project(matter_air_purifier)
 
 idf_build_set_property(CXX_COMPILE_OPTIONS "-std=gnu++17;-Os;-DCHIP_HAVE_CONFIG_H;-Wno-overloaded-virtual" APPEND)
 idf_build_set_property(C_COMPILE_OPTIONS "-Os" APPEND)

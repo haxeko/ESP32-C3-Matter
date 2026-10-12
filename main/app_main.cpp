@@ -10,15 +10,15 @@
 
 #include <app_priv.h>
 #include <app_reset.h>
-#if CONFIG_BL0937_ENABLE
 #include <power_meter.h>
-#endif
+#include <purifier.h>
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
+#include <clusters/FanControl/Enums.h>
 
 static const char *TAG = "app_main";
-uint16_t relay_endpoint_id = 0;
+static uint16_t purifier_endpoint_id = 0;
 
 using namespace esp_matter;
 using namespace esp_matter::attribute;
@@ -83,27 +83,24 @@ static esp_err_t app_identification_cb(identification::callback_type_t type, uin
     return ESP_OK;
 }
 
+/* Purifier commands arrive through the Fan Control delegate (see purifier.cpp), nothing to do here */
 static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                                          uint32_t attribute_id, esp_matter_attr_val_t *val, void *priv_data)
 {
-    esp_err_t err = ESP_OK;
-
-    if (type == PRE_UPDATE) {
-        app_driver_handle_t driver_handle = (app_driver_handle_t)priv_data;
-        err = app_driver_attribute_update(driver_handle, endpoint_id, cluster_id, attribute_id, val);
-    }
-
-    return err;
+    return ESP_OK;
 }
 
 extern "C" void app_main()
 {
     esp_err_t err = ESP_OK;
 
+    /* Release the relay (purifier power button) before anything else */
+    err = purifier_init();
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init relay, err:%d", err));
+
     nvs_flash_init();
 
-    /* Relay on GPIO5 (CONFIG_RELAY_GPIO), BOOT button for toggle + factory reset */
-    app_driver_handle_t relay_handle = app_driver_relay_init();
+    /* BOOT button: short press switches the purifier, long press = factory reset */
     app_driver_handle_t button_handle = app_driver_button_init();
     app_reset_button_register(button_handle);
 
@@ -111,16 +108,17 @@ extern "C" void app_main()
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
-    /* On/Off Plug-in Unit device type: shows up as a switch/outlet in Apple Home, Google Home, Alexa, HA */
-    on_off_plug_in_unit::config_t plug_config;
-    plug_config.on_off.on_off = DEFAULT_POWER;
-    endpoint_t *endpoint = on_off_plug_in_unit::create(node, &plug_config, ENDPOINT_FLAG_NONE, relay_handle);
-    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create on/off plug-in unit endpoint"));
+    /* Air Purifier device type, on/off only: FanModeSequence Off/High */
+    air_purifier::config_t purifier_config;
+    purifier_config.fan_control.fan_mode = chip::to_underlying(FanControl::FanModeEnum::kOff);
+    purifier_config.fan_control.fan_mode_sequence = chip::to_underlying(FanControl::FanModeSequenceEnum::kOffHigh);
+    endpoint_t *endpoint = air_purifier::create(node, &purifier_config, ENDPOINT_FLAG_NONE, NULL);
+    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create air purifier endpoint"));
 
-    relay_endpoint_id = endpoint::get_id(endpoint);
-    ESP_LOGI(TAG, "Relay plug-in unit created with endpoint_id %d", relay_endpoint_id);
+    purifier_endpoint_id = endpoint::get_id(endpoint);
+    ESP_LOGI(TAG, "Air purifier created with endpoint_id %d", purifier_endpoint_id);
 
-#if CONFIG_BL0937_ENABLE
+#if CONFIG_POWER_METER_MATTER
     /* Same endpoint also becomes an Electrical Sensor: power / voltage / current / energy */
     err = power_meter_add_to_endpoint(endpoint);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to add electrical sensor, err:%d", err));
@@ -129,15 +127,14 @@ extern "C" void app_main()
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
 
-    /* Restore the last relay state persisted in NVS */
-    app_driver_relay_set_defaults(relay_endpoint_id);
+    err = purifier_start(purifier_endpoint_id);
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start purifier control, err:%d", err));
 
-#if CONFIG_BL0937_ENABLE
-    err = power_meter_start(relay_endpoint_id);
+    /* The power draw tells whether the purifier is running */
+    err = power_meter_start(purifier_endpoint_id, purifier_report_power);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Power meter not started, err:%d", err);
+        ESP_LOGE(TAG, "Power meter not started, purifier state unknown, err:%d", err);
     }
-#endif
 
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();
