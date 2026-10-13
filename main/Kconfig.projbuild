@@ -89,26 +89,31 @@ menu "BL0937 Power Meter"
 
     config BL0937_SHUNT_MICROOHM
         int "Current shunt resistor (micro-ohm)"
+        range 100 100000
         default 1000
         help
             1000 = 1 mOhm, the usual value on smart plugs.
 
     config BL0937_VOLTAGE_DIVIDER
         int "Voltage divider ratio (R_upper + R_lower) / R_lower"
+        range 100 10000
         default 2351
         help
             e.g. 5 x 470k + 1k -> 2351.
 
     config BL0937_POWER_CAL_PERMILLE
         int "Power calibration factor (per mille, 1000 = x1.000)"
+        range 500 2000
         default 1000
 
     config BL0937_VOLTAGE_CAL_PERMILLE
         int "Voltage calibration factor (per mille)"
+        range 500 2000
         default 1000
 
     config BL0937_CURRENT_CAL_PERMILLE
         int "Current calibration factor (per mille)"
+        range 500 2000
         default 1000
 
     config BL0937_UPDATE_INTERVAL_MS

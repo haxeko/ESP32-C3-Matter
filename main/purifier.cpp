@@ -31,6 +31,11 @@ static constexpr gpio_num_t k_relay_gpio = (gpio_num_t)CONFIG_RELAY_GPIO;
 static constexpr int64_t k_pulse_gap_us = CONFIG_PURIFIER_PULSE_GAP_MS * 1000LL;
 static constexpr int64_t k_confirm_timeout_us = CONFIG_PURIFIER_CONFIRM_TIMEOUT_MS * 1000LL;
 
+/* Otherwise every press would time out before the power draw can confirm it, and the app state would bounce */
+static_assert(CONFIG_PURIFIER_CONFIRM_TIMEOUT_MS >
+                  CONFIG_PURIFIER_PULSE_MS + (CONFIG_PURIFIER_DEBOUNCE_SAMPLES + 1) * CONFIG_BL0937_UPDATE_INTERVAL_MS,
+              "PURIFIER_CONFIRM_TIMEOUT_MS too short for PURIFIER_DEBOUNCE_SAMPLES x BL0937_UPDATE_INTERVAL_MS");
+
 namespace {
 
 enum event_type_t { EVT_POWER, EVT_SET, EVT_TOGGLE };

@@ -58,6 +58,9 @@ Logic nằm trong `main/purifier.cpp`. Lệnh từ Matter đến qua `FanControl
 
 Hoặc sửa `sdkconfig.defaults.esp32c3` rồi xoá `sdkconfig` để áp dụng lại.
 
+Build sẽ báo lỗi ngay nếu cấu hình không hợp lệ: chân relay / BL0937 trùng nhau, trùng GPIO9 (nút BOOT) hoặc
+GPIO11–17 (flash), hay `PURIFIER_CONFIRM_TIMEOUT_MS` ngắn hơn thời gian cần để công suất xác nhận trạng thái.
+
 ## Đo công suất (BL0937)
 
 BL0937 luôn được dùng để biết máy đang bật hay tắt. Ngoài ra (tuỳ chọn `POWER_METER_MATTER`, mặc định bật)

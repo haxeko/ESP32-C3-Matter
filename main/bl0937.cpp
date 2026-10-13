@@ -127,8 +127,13 @@ esp_err_t bl0937_init(uint64_t energy_base_mwh)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) { /* INVALID_STATE: already installed */
         return err;
     }
-    gpio_isr_handler_add(k_cf_gpio, cf_isr, NULL);
-    gpio_isr_handler_add(k_cf1_gpio, cf1_isr, NULL);
+    err = gpio_isr_handler_add(k_cf_gpio, cf_isr, NULL);
+    if (err == ESP_OK) {
+        err = gpio_isr_handler_add(k_cf1_gpio, cf1_isr, NULL);
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
 
     select_cf1_mode(false); /* start with voltage */
 

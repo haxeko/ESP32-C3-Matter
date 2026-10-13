@@ -17,6 +17,16 @@
 #include <app/server/Server.h>
 #include <clusters/FanControl/Enums.h>
 
+/* GPIO9 is the BOOT button (esp32c3_devkit_m device_hal), GPIO11..17 belong to the SPI flash */
+#define APP_PIN_USABLE(p) ((p) != 9 && ((p) < 11 || (p) > 17))
+static_assert(APP_PIN_USABLE(CONFIG_RELAY_GPIO) && APP_PIN_USABLE(CONFIG_BL0937_CF_GPIO) &&
+                  APP_PIN_USABLE(CONFIG_BL0937_CF1_GPIO) && APP_PIN_USABLE(CONFIG_BL0937_SEL_GPIO),
+              "relay / BL0937 pin set to the BOOT button or a flash pin");
+static_assert(CONFIG_RELAY_GPIO != CONFIG_BL0937_CF_GPIO && CONFIG_RELAY_GPIO != CONFIG_BL0937_CF1_GPIO &&
+                  CONFIG_RELAY_GPIO != CONFIG_BL0937_SEL_GPIO && CONFIG_BL0937_CF_GPIO != CONFIG_BL0937_CF1_GPIO &&
+                  CONFIG_BL0937_CF_GPIO != CONFIG_BL0937_SEL_GPIO && CONFIG_BL0937_CF1_GPIO != CONFIG_BL0937_SEL_GPIO,
+              "relay and BL0937 pins must all be different");
+
 static const char *TAG = "app_main";
 static uint16_t purifier_endpoint_id = 0;
 
@@ -79,6 +89,7 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 static esp_err_t app_identification_cb(identification::callback_type_t type, uint16_t endpoint_id, uint8_t effect_id,
                                        uint8_t effect_variant, void *priv_data)
 {
+    /* Log only: the relay can only toggle the purifier, it must not be used as an identify indicator */
     ESP_LOGI(TAG, "Identification callback: type: %u, effect: %u, variant: %u", type, effect_id, effect_variant);
     return ESP_OK;
 }
@@ -98,11 +109,22 @@ extern "C" void app_main()
     err = purifier_init();
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init relay, err:%d", err));
 
-    nvs_flash_init();
+    err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        /* Unreadable by this firmware anyway: start over, the device has to be commissioned again */
+        ESP_LOGW(TAG, "NVS unusable (%s), erasing it", esp_err_to_name(err));
+        err = nvs_flash_erase();
+        if (err == ESP_OK) {
+            err = nvs_flash_init();
+        }
+    }
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init NVS, err:%d", err));
 
     /* BOOT button: short press switches the purifier, long press = factory reset */
     app_driver_handle_t button_handle = app_driver_button_init();
-    app_reset_button_register(button_handle);
+    if (app_reset_button_register(button_handle) != ESP_OK) {
+        ESP_LOGW(TAG, "BOOT button unavailable: no local on/off and no factory reset by button");
+    }
 
     node::config_t node_config;
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
